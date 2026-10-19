@@ -1,0 +1,382 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                     String    @id @default(cuid())
+  name                   String
+  email                  String    @unique
+  passwordHash           String
+  role                   String    @default("STUDENT") // STUDENT, TEACHER, ADMIN, SUPER_ADMIN
+  educationLevel         String?   // FSc Pre-Medical, FSc Pre-Engineering, ICS, A-Levels, etc.
+  targetExamId           String?
+  targetExamDate         DateTime?
+  dailyStudyTimeMinutes  Int       @default(60)
+  targetUniversity       String?
+  currentLevel           Int       @default(1)
+  xp                     Int       @default(0)
+  streak                 Int       @default(0)
+  longestStreak          Int       @default(0)
+  lastActiveDate         DateTime?
+  avatar                 String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  targetExam             Exam?     @relation(fields: [targetExamId], references: [id])
+  practiceSessions       PracticeSession[]
+  questionAttempts       QuestionAttempt[]
+  mockTestAttempts       MockTestAttempt[]
+  topicProgress          UserTopicProgress[]
+  mistakes               Mistake[]
+  flashcards             Flashcard[]
+  notes                  Note[]
+  aiConversations        AIConversation[]
+  userAchievements       UserAchievement[]
+  notifications          Notification[]
+  questionReports        QuestionReport[]
+  bookmarks              Bookmark[]
+}
+
+model Exam {
+  id               String    @id @default(cuid())
+  name             String    @unique // MDCAT, ECAT, NUMS, NET, FAST, etc.
+  slug             String    @unique
+  description      String
+  totalQuestions   Int       @default(100)
+  durationMinutes  Int       @default(120)
+  negativeMarking  Float     @default(0.0)
+  isConfigurable   Boolean   @default(true)
+  syllabus         String?   // JSON string of syllabus structure
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  users            User[]
+  subjects         Subject[]
+  questions        Question[]
+  mockTests        MockTest[]
+}
+
+model Subject {
+  id          String    @id @default(cuid())
+  examId      String
+  name        String
+  slug        String
+  description String?
+  icon        String?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  exam        Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  chapters    Chapter[]
+  questions   Question[]
+}
+
+model Chapter {
+  id          String    @id @default(cuid())
+  subjectId   String
+  name        String
+  slug        String
+  description String?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  subject     Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topics      Topic[]
+  questions   Question[]
+}
+
+model Topic {
+  id             String    @id @default(cuid())
+  chapterId      String
+  name           String
+  slug           String
+  description    String?
+  masteryWeight  Float     @default(1.0)
+  order          Int       @default(0)
+  createdAt      DateTime  @default(now())
+
+  chapter        Chapter   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  questions      Question[]
+  userProgress   UserTopicProgress[]
+  flashcards     Flashcard[]
+  notes          Note[]
+  aiConversations AIConversation[]
+}
+
+model Question {
+  id                   String         @id @default(cuid())
+  examId               String
+  subjectId            String
+  chapterId            String
+  topicId              String
+  questionText         String
+  optionA              String
+  optionB              String
+  optionC              String
+  optionD              String
+  correctOption        String         // "A" | "B" | "C" | "D"
+  explanation          String
+  whyOthersWrong       String?
+  hint                 String?
+  difficulty           String         @default("MEDIUM") // EASY, MEDIUM, HARD, EXPERT
+  questionType         String         @default("CONCEPTUAL") // CONCEPTUAL, NUMERICAL, APPLICATION, REASONING, MIXED
+  estimatedTimeSeconds Int            @default(60)
+  tags                 String?
+  source               String?
+  status               String         @default("PUBLISHED") // DRAFT, REVIEW, PUBLISHED, FLAGGED
+  formulaLatex         String?
+  aiConfidence         Float?         @default(0.95)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  exam                 Exam           @relation(fields: [examId], references: [id], onDelete: Cascade)
+  subject              Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  chapter              Chapter        @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  topic                Topic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  attempts             QuestionAttempt[]
+  mockTestQuestions    MockTestQuestion[]
+  mistakes             Mistake[]
+  reports              QuestionReport[]
+  bookmarks            Bookmark[]
+}
+
+model PracticeSession {
+  id                 String         @id @default(cuid())
+  userId             String
+  mode               String         @default("QUICK") // QUICK, TOPIC, WEAK_TOPIC, SPEED_DRILL, DAILY_CHALLENGE, MOCK_TEST, REAL_EXAM, AI_QUIZ
+  subjectId          String?
+  topicId            String?
+  totalQuestions     Int            @default(10)
+  correctCount       Int            @default(0)
+  timeSpentSeconds   Int            @default(0)
+  completed          Boolean        @default(false)
+  createdAt          DateTime       @default(now())
+
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempts           QuestionAttempt[]
+}
+
+model QuestionAttempt {
+  id                   String           @id @default(cuid())
+  userId               String
+  questionId           String
+  practiceSessionId    String?
+  mockTestAttemptId    String?
+  selectedOption       String
+  isCorrect            Boolean
+  timeSpentSeconds     Int              @default(0)
+  mistakeType          String?          // CONCEPT, CALCULATION, CARELESS, MISREADING, GUESSING, TIME_PRESSURE
+  createdAt            DateTime         @default(now())
+
+  user                 User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question             Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  practiceSession      PracticeSession? @relation(fields: [practiceSessionId], references: [id], onDelete: SetNull)
+  mockTestAttempt      MockTestAttempt? @relation(fields: [mockTestAttemptId], references: [id], onDelete: SetNull)
+}
+
+model MockTest {
+  id                   String           @id @default(cuid())
+  examId               String
+  title                String
+  description          String
+  durationMinutes      Int              @default(120)
+  totalQuestions       Int              @default(100)
+  passingPercentage    Float            @default(50.0)
+  negativeMarkingRatio Float            @default(0.0)
+  isOfficial           Boolean          @default(false)
+  createdAt            DateTime         @default(now())
+
+  exam                 Exam             @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questions            MockTestQuestion[]
+  attempts             MockTestAttempt[]
+}
+
+model MockTestQuestion {
+  id         String    @id @default(cuid())
+  mockTestId String
+  questionId String
+  order      Int       @default(0)
+
+  mockTest   MockTest  @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+  question   Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+model MockTestAttempt {
+  id                 String            @id @default(cuid())
+  userId             String
+  mockTestId         String
+  score              Float             @default(0.0)
+  totalQuestions     Int               @default(0)
+  correctCount       Int               @default(0)
+  incorrectCount     Int               @default(0)
+  skippedCount       Int               @default(0)
+  timeSpentSeconds   Int               @default(0)
+  completed          Boolean           @default(false)
+  aiAnalysis         String?
+  createdAt          DateTime          @default(now())
+
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mockTest           MockTest          @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+  attempts           QuestionAttempt[]
+}
+
+model UserTopicProgress {
+  id                 String    @id @default(cuid())
+  userId             String
+  topicId            String
+  totalAttempts      Int       @default(0)
+  correctAttempts    Int       @default(0)
+  accuracy           Float     @default(0.0)
+  averageTimeSeconds Float     @default(0.0)
+  masteryScore       Float     @default(0.0)
+  lastAttemptAt      DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic              Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+}
+
+model Mistake {
+  id             String       @id @default(cuid())
+  userId         String
+  questionId     String
+  studentAnswer  String
+  correctOption  String
+  mistakeType    String       @default("CONCEPT")
+  notes          String?
+  resolved       Boolean      @default(false)
+  retryCount     Int          @default(0)
+  lastAttemptAt  DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question       Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+}
+
+model Flashcard {
+  id             String    @id @default(cuid())
+  userId         String
+  topicId        String?
+  front          String
+  back           String
+  difficulty     String    @default("MEDIUM")
+  repetitions    Int       @default(0)
+  intervalDays   Int       @default(1)
+  easeFactor     Float     @default(2.5)
+  nextReviewDate DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic          Topic?    @relation(fields: [topicId], references: [id], onDelete: SetNull)
+}
+
+model Note {
+  id        String    @id @default(cuid())
+  userId    String
+  topicId   String?
+  title     String
+  content   String
+  tags      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic     Topic?    @relation(fields: [topicId], references: [id], onDelete: SetNull)
+}
+
+model AIConversation {
+  id        String      @id @default(cuid())
+  userId    String
+  topicId   String?
+  title     String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic     Topic?      @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  messages  AIMessage[]
+}
+
+model AIMessage {
+  id             String          @id @default(cuid())
+  conversationId String
+  sender         String          // "USER" | "AI"
+  text           String
+  role           String          @default("user")
+  metadata       String?
+  createdAt      DateTime        @default(now())
+
+  conversation   AIConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model Achievement {
+  id                String            @id @default(cuid())
+  title             String
+  slug              String            @unique
+  description       String
+  icon              String
+  xpReward          Int               @default(50)
+  badgeColor        String            @default("#4f46e5")
+  criteriaType      String
+  criteriaThreshold Int               @default(10)
+
+  userAchievements  UserAchievement[]
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime    @default(now())
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+}
+
+model QuestionReport {
+  id         String    @id @default(cuid())
+  userId     String
+  questionId String
+  reason     String
+  details    String?
+  status     String    @default("PENDING")
+  createdAt  DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question   Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+model Bookmark {
+  id         String    @id @default(cuid())
+  userId     String
+  questionId String
+  createdAt  DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question   Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String    @default("REMINDER")
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
